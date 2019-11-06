@@ -3,6 +3,7 @@
 #include <math.h>
 //#include <pthread.h>
 
+
 typedef struct dados{
     float ** valores;
     int** classe;
