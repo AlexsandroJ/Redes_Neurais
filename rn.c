@@ -233,7 +233,7 @@ void Calcular_Erro( rede_neural* rede, float Dy[], float taxa, dados_temp* temp)
     //      Calculo do novo peso do bias
         rede->neuro[    rede->n_camadas - 1][i]->p_bias = 
         rede->neuro[    rede->n_camadas - 1][i]->p_bias +
-        
+        -1*
         taxa*
         temp->derivada[ rede->n_camadas - 1][i]*
         rede->neuro[    rede->n_camadas - 1][i]->bias;
@@ -248,7 +248,7 @@ void Calcular_Erro( rede_neural* rede, float Dy[], float taxa, dados_temp* temp)
     //      derivada_da_saida_em_relacao_ao_peso)
             rede->neuro[    rede->n_camadas - 1 ][i]->pesos[j] = 
             rede->neuro[    rede->n_camadas - 1 ][i]->pesos[j] +
-            
+            -1*
             taxa*
             temp->derivada[ rede->n_camadas - 1 ][i]*
             (*rede->neuro[  rede->n_camadas - 1 ][i]->entradas[j]);
@@ -324,7 +324,7 @@ void main(){
     
     Conectar_Rede(rede,flores->valores[0]);
     Calcular_Saidas(rede);
-    while(  temp->med >= 0.05 && epoca < 20){
+    while(  temp->med >= 0.05 && epoca < 200000){
         
         for( int i = 0 ; i < 150 ; i++){
             //printf("\tExemplo:%d\n",i);
