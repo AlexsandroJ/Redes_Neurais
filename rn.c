@@ -5,7 +5,7 @@
 
 typedef struct dados{
     float **        valores;
-    int   **        classe;
+    float **        classe;
 }dados;
 
 typedef struct neuronio{
@@ -15,6 +15,7 @@ typedef struct neuronio{
     float           bias;             // Bias, valor de limiar, igual a B na equacao Y = aX + b
     float           p_bias;           // Peso para ser atualizado dos bias, assim ele pode ser melhorado
     float           saida;            // Saida do neuronio, que serar entrada de outro neuronio, por isso cada entrada armazena ponteiros
+    float           v;
 }neuronio;
 
 typedef struct  rede_neural{
@@ -30,6 +31,7 @@ typedef struct dados_temp{
     float **        pesos_old;
     float *         derivadas_parcial;
     float           soma;
+    float           med;
 }dados_temp;
 
 
@@ -43,7 +45,7 @@ neuronio* Criar_Neuronio(int n_entradas){
         neuro->pesos[i]         = rand()*0.0000001;
         //printf("Entrada[%d] Pesos:%f\n",i,neuro->pesos[i]);
     }
-    neuro->bias                 = rand()*0.0000001;
+    neuro->bias                 = 1;
     neuro->p_bias               = rand()*0.0000001;
     neuro->saida                = 0;
     //printf("Bias:%f Pesos Bias:%f\n",neuro->bias,neuro->p_bias);
@@ -105,18 +107,18 @@ dados* Abrir_Arquivo(char localizacao[], char tipo[], int n_entradas, int n_linh
     int j = 0;
     d           = (dados*)malloc(sizeof(dados));
     d->valores  = (float**)malloc(n_linhas*sizeof(float*));
-    d->classe   = (int**)malloc(n_linhas*sizeof(int*));
+    d->classe   = (float**)malloc(n_linhas*sizeof(float*));
     for( int i = 0 ; i < n_linhas; i++){
         d->valores[i] = (float*)malloc(n_entradas*sizeof(float));
-        d->classe[i]  = (int*)malloc(n_classes*sizeof(int));
+        d->classe[i]  = (float*)malloc(n_classes*sizeof(float));
     }
     arq = fopen(localizacao, tipo);
     if (arq == NULL) {
         printf("Problemas na abertura do arquivo\n");
         return NULL;
     }else{    
-        while (fscanf(arq,"%f,%f,%f,%f,%d,%d,%d",&d->valores[j][0],&d->valores[j][1],&d->valores[j][2],&d->valores[j][3],&d->classe[j][0],&d->classe[j][1],&d->classe[j][2]) != EOF && j < n_linhas){
-            //printf("%f, %f, %f, %f - %d %d %d\n",d->valores[j][0],d->valores[j][1],d->valores[j][2],d->valores[j][3],d->classe[j][0],d->classe[j][1],d->classe[j][2]);
+        while (fscanf(arq,"%f,%f,%f,%f,%f,%f",&d->valores[j][0],&d->valores[j][1],&d->valores[j][2],&d->valores[j][3],&d->classe[j][0],&d->classe[j][1]) != EOF && j < n_linhas){
+            //printf("%f, %f, %f, %f | %f %f\n",d->valores[j][0],d->valores[j][1],d->valores[j][2],d->valores[j][3],d->classe[j][0],d->classe[j][1]);
             j++;
         }
         fclose(arq);
@@ -141,7 +143,8 @@ void Printar_Rede( rede_neural* rede){
 }
 
 float Ativacao(float x){
-    x = 1/(1+ exp(-x));
+    x = 1/(1+ exp(-5*x));
+    //if( x < 5.0 )return 0;
 
     return x;
 }
@@ -158,14 +161,16 @@ void Calcular_Saidas( rede_neural* rede){
             saida = saida + rede->neuro[k][i]->bias * rede->neuro[k][i]->p_bias;
     //          Todas as entradas de uma camada tem seus enderecos salvos como ponteiros nas entradas dos
     //          Neuronios da proxima camada
+            //if ( saida < 0.5 ) saida = saida*-1;
             rede->neuro[k][i]->saida = Ativacao(saida);
+            rede->neuro[k][i]->v     = saida;
         } 
     }
 }
 
 float Derivar_Sigmoid(float x){
-    x = pow(2.71828182,-x)/pow(1+exp(-x),2);
-    //x = x*(1-x);
+    //x = pow(2.71828182,-x)/pow(1+exp(-x),2);
+    x = 5*x*(1-x);
     return x;
 }
 
@@ -177,6 +182,7 @@ dados_temp* Alocar_Memoria_Pesos_old_temp(rede_neural* rede){
     temp->pesos_old         = (float**)malloc(10*sizeof(float*));
     temp->derivadas_parcial = (float*)malloc(10*sizeof(float));
     temp->soma              = 0;
+    temp->med               = 100;
     for( int i = 0 ; i < 10; i++){
     // Aloca a quantidade entradas para cada neuronio
         temp->pesos_old[i] = (float*)malloc(10*sizeof(float));
@@ -200,8 +206,9 @@ dados_temp* Alocar_Memoria_Pesos_old_temp(rede_neural* rede){
 }
 
 
-void Calcular_Erro( rede_neural* rede, int Dy[], float taxa, dados_temp* temp){
-    float soma_pesos = 0;
+void Calcular_Erro( rede_neural* rede, float Dy[], float taxa, dados_temp* temp){
+    float soma_pesos    = 0;
+    temp->med           = 0;
     // Salvar Pesos antigos
     *temp->neuro = *rede->neuro;
     //      ____________________________________Primeiro Caso_____________________________
@@ -210,14 +217,24 @@ void Calcular_Erro( rede_neural* rede, int Dy[], float taxa, dados_temp* temp){
     //      por isso n_camadas - 1, percorrer apenas a ultima camada  \/
     for( int i = 0 ; i < rede->neuronios_por_camada[ rede->n_camadas - 1 ]; i++){
     //      Calculo das Derivadas Parciais
+        
         temp->derivada[ rede->n_camadas - 1][i] = 
-        taxa*
-        (Dy[i] - rede->neuro[ rede->n_camadas - 1 ][i]->saida);
-        (Derivar_Sigmoid(rede->neuro[ rede->n_camadas - 1 ][i]->saida));
-        printf("Neuronio:%d Erro: %.4f Out:%.4f ",i,(Dy[i] - rede->neuro[ rede->n_camadas - 1 ][i]->saida ),rede->neuro[ rede->n_camadas - 1 ][i]->saida);
+        -1*(Dy[i] - rede->neuro[ rede->n_camadas - 1 ][i]->saida)*
+        (Derivar_Sigmoid(rede->neuro[ rede->n_camadas - 1 ][i]->v));
+/*
+        if( (Dy[i] - rede->neuro[ rede->n_camadas - 1 ][i]->saida) < 0.5  ){
+            temp->derivada[ rede->n_camadas - 1][i] = 
+            temp->derivada[ rede->n_camadas - 1][i]* 
+            (-1);
+         }*/
+        temp->med += pow( (Dy[i] - rede->neuro[ rede->n_camadas - 1 ][i]->saida), 2)/2;
+        
+        //printf("Neuronio:%d Erro: %f Out:%f ",i,(Dy[i] - rede->neuro[ rede->n_camadas - 1 ][i]->saida ),rede->neuro[ rede->n_camadas - 1 ][i]->saida);
     //      Calculo do novo peso do bias
         rede->neuro[    rede->n_camadas - 1][i]->p_bias = 
-        rede->neuro[    rede->n_camadas - 1][i]->p_bias -
+        rede->neuro[    rede->n_camadas - 1][i]->p_bias +
+        
+        taxa*
         temp->derivada[ rede->n_camadas - 1][i]*
         rede->neuro[    rede->n_camadas - 1][i]->bias;
     //      Segundo laco serve para percorrer as entradas dos neuronios,
@@ -230,41 +247,52 @@ void Calcular_Erro( rede_neural* rede, int Dy[], float taxa, dados_temp* temp){
     //      derivada_da_fucao_ativacao_em_relacao_a_saida_do_neuronio*
     //      derivada_da_saida_em_relacao_ao_peso)
             rede->neuro[    rede->n_camadas - 1 ][i]->pesos[j] = 
-            rede->neuro[    rede->n_camadas - 1 ][i]->pesos[j] -
+            rede->neuro[    rede->n_camadas - 1 ][i]->pesos[j] +
+            
+            taxa*
             temp->derivada[ rede->n_camadas - 1 ][i]*
             (*rede->neuro[  rede->n_camadas - 1 ][i]->entradas[j]);
         }
     }
+    //temp->med = temp->med/rede->neuronios_por_camada[ rede->n_camadas - 1];
+    //printf("Err:Med:%.2f",temp->med*100);
 }
-void Atualizar_Pesos( rede_neural* rede, dados_temp* temp){
+void Atualizar_Pesos( rede_neural* rede, dados_temp* temp, float taxa){
     float        soma_pesos_old;
     // Percorre as camadas
     for( int k = rede->n_camadas -2; k >= 0 ; k--){
     // Percorre os neuronios de cada camada
         for( int i = 0 ; i < rede->neuronios_por_camada[k] ; i++){
-
+            
     // Calculo das derivadas parciais do erro em relacao aos pesos das camadas ocultas
             soma_pesos_old = 0;
             for( int u = 0 ; u < rede->neuronios_por_camada[ k + 1 ]; u++){
                 soma_pesos_old += 
                 rede->neuro[     k+1][u]->pesos[i]*
                 temp->derivada[  k+1][u];
-            }   
-            temp->derivada[ k][i] = soma_pesos_old;
+            }
+            temp->derivada[ k][i] = -1*Derivar_Sigmoid(rede->neuro[    k ][i]->v)*soma_pesos_old;
+            //temp->derivada[ k][i] = soma_pesos_old;
 
             for(int j = 0 ; j < rede->neuronios_por_camada[k] ; j++){
     // Percorre e soma os pesos da camada anterior ligados os neronio
                // Atualização dos pesos
                 rede->neuro[    k ][i]->pesos[j] = 
-                rede->neuro[    k ][i]->pesos[j] -
+                rede->neuro[    k ][i]->pesos[j] +
+                -1*
+                taxa*
                 (*rede->neuro[  k ][i]->entradas[j])*
-                temp->derivada[ k ][i];
+                temp->derivada[ k ][i]*
+                Derivar_Sigmoid(rede->neuro[k][i]->v);
             }
     // Atualizacao dos pesos do bias
             rede->neuro[        k ][i]->p_bias = 
-            rede->neuro[        k ][i]->p_bias -
+            rede->neuro[        k ][i]->p_bias +
+            -1*
+            taxa*
             rede->neuro[        k ][i]->bias*
-            temp->derivada[     k ][i];
+            temp->derivada[     k ][i]*
+            Derivar_Sigmoid(rede->neuro[k][i]->v);
         }
     }
 }
@@ -279,6 +307,8 @@ void Atualizar_entradas(rede_neural* rede, float* entradas){
 }
 
 void main(){
+    int epoca = 0;
+    float erro_total_med = 0;
     rede_neural * rede;
     dados* flores;
     dados_temp* temp;
@@ -286,26 +316,27 @@ void main(){
     
     Adicionar_Camada(rede,4,0,4);
     Adicionar_Camada(rede,4,1,4);
-    Adicionar_Camada(rede,4,2,3);
+    Adicionar_Camada(rede,4,2,2);
 
     temp = Alocar_Memoria_Pesos_old_temp(rede);
 
-    flores = Abrir_Arquivo("iris.txt","rt",4,150,3);
+    flores = Abrir_Arquivo("iris.txt","rt",4,150,2);
+    
     Conectar_Rede(rede,flores->valores[0]);
     Calcular_Saidas(rede);
-    //Printar_Rede(rede);
-    
-    //Calcular_Erro(rede,flores->classe[0],0.1,temp);
-     //   Atualizar_Pesos(rede,temp);
-      //  Calcular_Saidas(rede);
-      //  Printar_Rede(rede);
-    
-    for( int i = 0 ; i < 150 ; i++){
-        printf("\t\tEpoca:%d\n",i);
-        //Printar_Rede(rede);
-        Calcular_Erro(rede,flores->classe[i],0.1,temp);
-        Atualizar_Pesos(rede,temp);
-        Calcular_Saidas(rede);
-        Atualizar_entradas(rede,flores->valores[i]);
+    while(  temp->med >= 0.05 && epoca < 20){
+        
+        for( int i = 0 ; i < 150 ; i++){
+            //printf("\tExemplo:%d\n",i);
+            //Printar_Rede(rede);
+            Calcular_Erro(rede,flores->classe[i],0.01,temp);
+            Atualizar_Pesos(rede,temp,0.01);
+            Calcular_Saidas(rede);
+            Atualizar_entradas(rede,flores->valores[i]);
+            erro_total_med += temp->med;
+        }
+        erro_total_med = erro_total_med/150;
+        printf("\t\tEpoca:%d erro:%f Erro Total Medio:%f\n",epoca,temp->med*100, erro_total_med*100);
+        epoca++;
     }
 }
